@@ -245,35 +245,18 @@ export default function App() {
 function TheoryView({ model, dyad }: { model: AppModel; dyad: ReturnType<typeof calculateDyad> }) {
   const selfName = displayName(model.self.name, "Joy");
   const partnerName = displayName(model.partner.name, "Socratito");
-  const combined = dyad.self.points.map((point, index) => ({
+  const landingYears = landingGraphYears(model, dyad.horizon);
+  const combined = dyad.self.points.filter((point) => point.t <= landingYears).map((point, index) => ({
     t: point.t,
     age: point.age,
     self: point.love,
-    partner: dyad.partner.points[index]?.love ?? 0,
+    partner: dyad.partner.points.find((partnerPoint) => partnerPoint.t === point.t)?.love ?? dyad.partner.points[index]?.love ?? 0,
     selfPlateau: point.plateau,
-    partnerPlateau: dyad.partner.points[index]?.plateau ?? 0,
+    partnerPlateau: dyad.partner.points.find((partnerPoint) => partnerPoint.t === point.t)?.plateau ?? dyad.partner.points[index]?.plateau ?? 0,
   }));
 
   return (
     <section className="learn-grid">
-      <div className="chart-panel lifetime-panel">
-        <PanelHeader label="Lifetime love curve" value={`Modeled to ${Math.round(dyad.horizon)} relationship-years`} />
-        <ResponsiveContainer width="100%" height={430}>
-          <LineChart data={combined} margin={{ top: 12, right: 24, left: 0, bottom: 8 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#d9ded6" />
-            <XAxis dataKey="t" tickLine={false} axisLine={false} tickFormatter={formatYears} />
-            <YAxis tickLine={false} axisLine={false} domain={[0, 100]} />
-            <Tooltip labelFormatter={(value) => `relationship year ${value}`} formatter={tooltipValue} />
-            <ReferenceLine x={model.self.relationshipLengthYears} stroke="#1f7a76" strokeDasharray="4 4" />
-            <ReferenceLine x={model.partner.relationshipLengthYears} stroke="#c0506f" strokeDasharray="4 4" />
-            <Line type="monotone" dataKey="self" stroke="#1f7a76" strokeWidth={3} dot={false} name={`${selfName} L_receive`} />
-            <Line type="monotone" dataKey="partner" stroke="#c0506f" strokeWidth={3} dot={false} name={`${partnerName} L_receive`} />
-            <Line type="monotone" dataKey="selfPlateau" stroke="#6b8e5d" strokeWidth={2} dot={false} strokeDasharray="6 4" name={`${selfName} plateau`} />
-            <Line type="monotone" dataKey="partnerPlateau" stroke="#7c6ab1" strokeWidth={2} dot={false} strokeDasharray="6 4" name={`${partnerName} plateau`} />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
-
       <div className="hero-panel">
         <div className="formula-mark">
           <Heart size={28} />
@@ -287,6 +270,24 @@ function TheoryView({ model, dyad }: { model: AppModel; dyad: ReturnType<typeof 
         <div className="equation">
           L<sub>receive</sub>(t) tracks feeling loved; G<sub>give</sub>(t) tracks care sent outward; risk rises when L(t) &lt; R(t)
         </div>
+      </div>
+
+      <div className="chart-panel lifetime-panel">
+        <PanelHeader label="Lifetime love curve" value={`First ${landingYears} years`} />
+        <ResponsiveContainer width="100%" height={430}>
+          <LineChart data={combined} margin={{ top: 12, right: 24, left: 0, bottom: 8 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#d9ded6" />
+            <XAxis dataKey="t" type="number" tickLine={false} axisLine={false} tickFormatter={formatYears} domain={[0, landingYears]} />
+            <YAxis tickLine={false} axisLine={false} domain={[0, 105]} />
+            <Tooltip labelFormatter={(value) => `relationship year ${value}`} formatter={tooltipValue} />
+            <ReferenceLine x={model.self.relationshipLengthYears} stroke="#1f7a76" strokeDasharray="4 4" />
+            <ReferenceLine x={model.partner.relationshipLengthYears} stroke="#c0506f" strokeDasharray="4 4" />
+            <Line type="monotone" dataKey="self" stroke="#1f7a76" strokeWidth={3} dot={false} name={`${selfName} L_receive`} />
+            <Line type="monotone" dataKey="partner" stroke="#c0506f" strokeWidth={3} dot={false} name={`${partnerName} L_receive`} />
+            <Line type="monotone" dataKey="selfPlateau" stroke="#6b8e5d" strokeWidth={2} dot={false} strokeDasharray="6 4" name={`${selfName} plateau`} />
+            <Line type="monotone" dataKey="partnerPlateau" stroke="#7c6ab1" strokeWidth={2} dot={false} strokeDasharray="6 4" name={`${partnerName} plateau`} />
+          </LineChart>
+        </ResponsiveContainer>
       </div>
 
       <div className="concept-row">
@@ -841,6 +842,11 @@ function tooltipValue(value: unknown, name: unknown): [string, string] {
   const label = typeof name === "string" ? name : String(name);
   if (Number.isFinite(numeric)) return [numeric.toFixed(1), label];
   return [String(value), label];
+}
+
+function landingGraphYears(model: AppModel, horizon: number): number {
+  const currentLength = Math.max(model.self.relationshipLengthYears, model.partner.relationshipLengthYears);
+  return Math.min(horizon, Math.max(5, Math.ceil(currentLength + 2)));
 }
 
 function displayName(name: string, fallback: string): string {

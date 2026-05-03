@@ -230,12 +230,12 @@ export function applyAttachmentPreset(person: PersonModel, attachmentStyle: Atta
   };
 }
 
-export function calculateCurve(person: PersonModel, horizon: number, samples = 121): CurveResult {
+export function calculateCurve(person: PersonModel, horizon: number, samples = 361): CurveResult {
   const points: CurvePoint[] = [];
   const dt = horizon / (samples - 1);
   const predictedPlateau = predictPlateau(person);
   const peakYear = Math.max(0.08, person.honeymoonPeakMonth / 12);
-  const peakTarget = Math.max(predictedPlateau + 4, person.honeymoonPeakIntensity);
+  const peakTarget = clamp(Math.max(predictedPlateau + 22, person.honeymoonPeakIntensity), 0, 100);
   const ageAtStart = Math.max(0, person.age - person.relationshipLengthYears);
 
   for (let i = 0; i < samples; i += 1) {
@@ -255,10 +255,10 @@ export function calculateCurve(person: PersonModel, horizon: number, samples = 1
     });
     const channelLift = (positive - 50) * 0.22;
     const trustAdjustment = (trustGate - 0.62) * 22;
-    const natural = lifecycle + person.baseline * 0.34 + channelLift + trustAdjustment + reflexiveLift - marketDrag;
-    const penalized = natural - anti;
+    const natural = clamp(lifecycle + person.baseline * 0.34 + channelLift + trustAdjustment + reflexiveLift - marketDrag, 0, 100);
+    const penalized = clamp(natural - anti, 0, 100);
     const floor = Math.max(0, person.floor - marketDrag * 0.45);
-    const love = Math.max(floor, penalized);
+    const love = clamp(Math.max(floor, penalized), 0, 100);
     const reservation = person.reservationUtility + marketDrag * 0.7;
     const endRisk = calculateEndRisk({
       love,
@@ -392,10 +392,13 @@ function lifecycleValue({
   peakTarget: number;
   plateau: number;
 }): number {
-  const rise = 1 - Math.exp(-t / Math.max(0.05, peakYear * 0.48));
-  const plateauRise = plateau * (1 - Math.exp(-t / 1.6));
-  const honeymoonSurplus = Math.max(0, peakTarget - plateau) * rise * Math.exp(-Math.max(0, t - peakYear) / 1.55);
-  return clamp(plateauRise + honeymoonSurplus, 0, 100);
+  if (t <= peakYear) {
+    const normalizedRise = (1 - Math.exp(-t / Math.max(0.03, peakYear / 3))) / (1 - Math.exp(-3));
+    return clamp(peakTarget * normalizedRise, 0, 100);
+  }
+
+  const decay = Math.exp(-(t - peakYear) / 0.72);
+  return clamp(plateau + (peakTarget - plateau) * decay, 0, 100);
 }
 
 function calculateGiving({
