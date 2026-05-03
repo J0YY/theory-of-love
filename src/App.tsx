@@ -43,8 +43,8 @@ type Tab = "learn" | "me" | "partner" | "together";
 
 const tabLabels: Record<Tab, string> = {
   learn: "Theory",
-  me: "My graph",
-  partner: "Partner graph",
+  me: "Joy graph",
+  partner: "Socratito graph",
   together: "Together",
 };
 
@@ -102,6 +102,13 @@ export default function App() {
   const [tab, setTab] = useState<Tab>("learn");
   const [shareStatus, setShareStatus] = useState("Ready");
   const dyad = useMemo(() => calculateDyad(model), [model]);
+  const selfName = displayName(model.self.name, "Joy");
+  const partnerName = displayName(model.partner.name, "Socratito");
+  const activeTabLabels: Record<Tab, string> = {
+    ...tabLabels,
+    me: `${selfName} graph`,
+    partner: `${partnerName} graph`,
+  };
 
   function updatePerson(key: "self" | "partner", next: PersonModel) {
     setModel((current) => ({ ...current, [key]: next }));
@@ -167,9 +174,9 @@ export default function App() {
       </header>
 
       <nav className="tabs" aria-label="Dashboard sections">
-        {(Object.keys(tabLabels) as Tab[]).map((key) => (
+        {(Object.keys(activeTabLabels) as Tab[]).map((key) => (
           <button key={key} className={tab === key ? "active" : ""} onClick={() => setTab(key)}>
-            {tabLabels[key]}
+            {activeTabLabels[key]}
           </button>
         ))}
       </nav>
@@ -177,7 +184,7 @@ export default function App() {
       {tab === "learn" && <TheoryView model={model} dyad={dyad} />}
       {tab === "me" && (
         <PersonWorkspace
-          title="My registered love curve"
+          title={`${selfName} received-love curve`}
           person={model.self}
           result={dyad.self}
           onChange={(next) => updatePerson("self", next)}
@@ -185,7 +192,7 @@ export default function App() {
       )}
       {tab === "partner" && (
         <PersonWorkspace
-          title="Partner registered love curve"
+          title={`${partnerName} received-love curve`}
           person={model.partner}
           result={dyad.partner}
           onChange={(next) => updatePerson("partner", next)}
@@ -207,6 +214,8 @@ export default function App() {
 }
 
 function TheoryView({ model, dyad }: { model: AppModel; dyad: ReturnType<typeof calculateDyad> }) {
+  const selfName = displayName(model.self.name, "Joy");
+  const partnerName = displayName(model.partner.name, "Socratito");
   const combined = dyad.self.points.map((point, index) => ({
     t: point.t,
     self: point.love,
@@ -239,8 +248,8 @@ function TheoryView({ model, dyad }: { model: AppModel; dyad: ReturnType<typeof 
             <XAxis dataKey="t" tickLine={false} axisLine={false} />
             <YAxis tickLine={false} axisLine={false} />
             <Tooltip />
-            <Line type="monotone" dataKey="self" stroke="#1f7a76" strokeWidth={3} dot={false} name={model.self.name} />
-            <Line type="monotone" dataKey="partner" stroke="#c0506f" strokeWidth={3} dot={false} name={model.partner.name} />
+            <Line type="monotone" dataKey="self" stroke="#1f7a76" strokeWidth={3} dot={false} name={selfName} />
+            <Line type="monotone" dataKey="partner" stroke="#c0506f" strokeWidth={3} dot={false} name={partnerName} />
           </LineChart>
         </ResponsiveContainer>
       </div>
@@ -460,12 +469,14 @@ function TogetherView({
   shareStatus: string;
 }) {
   const [insight, setInsight] = useState<string[]>([]);
+  const selfName = displayName(model.self.name, "Joy");
+  const partnerName = displayName(model.partner.name, "Socratito");
   const combined = dyad.self.points.map((point, index) => ({
     t: point.t,
-    [model.self.name]: point.love,
-    [model.partner.name]: dyad.partner.points[index]?.love ?? 0,
-    [`${model.self.name} giving`]: point.giving,
-    [`${model.partner.name} giving`]: dyad.partner.points[index]?.giving ?? 0,
+    [selfName]: point.love,
+    [partnerName]: dyad.partner.points[index]?.love ?? 0,
+    [`${selfName} giving`]: point.giving,
+    [`${partnerName} giving`]: dyad.partner.points[index]?.giving ?? 0,
     gap: Math.abs(point.love - (dyad.partner.points[index]?.love ?? 0)),
     risk: (point.endRisk + (dyad.partner.points[index]?.endRisk ?? 0)) / 2,
     deadweight:
@@ -486,10 +497,10 @@ function TogetherView({
             <XAxis dataKey="t" tickLine={false} axisLine={false} />
             <YAxis tickLine={false} axisLine={false} />
             <Tooltip />
-            <Line type="monotone" dataKey={model.self.name} stroke="#1f7a76" strokeWidth={3} dot={false} />
-            <Line type="monotone" dataKey={model.partner.name} stroke="#c0506f" strokeWidth={3} dot={false} />
-            <Line type="monotone" dataKey={`${model.self.name} giving`} stroke="#4967a8" strokeWidth={2} dot={false} />
-            <Line type="monotone" dataKey={`${model.partner.name} giving`} stroke="#7c6ab1" strokeWidth={2} dot={false} />
+            <Line type="monotone" dataKey={selfName} stroke="#1f7a76" strokeWidth={3} dot={false} />
+            <Line type="monotone" dataKey={partnerName} stroke="#c0506f" strokeWidth={3} dot={false} />
+            <Line type="monotone" dataKey={`${selfName} giving`} stroke="#4967a8" strokeWidth={2} dot={false} />
+            <Line type="monotone" dataKey={`${partnerName} giving`} stroke="#7c6ab1" strokeWidth={2} dot={false} />
             <Line type="monotone" dataKey="gap" stroke="#9b6a2f" strokeWidth={2} dot={false} strokeDasharray="5 5" />
             <Line type="monotone" dataKey="deadweight" stroke="#5f6673" strokeWidth={2} dot={false} strokeDasharray="2 5" />
             <Line type="monotone" dataKey="risk" stroke="#d28b21" strokeWidth={2} dot={false} strokeDasharray="6 4" />
@@ -503,10 +514,10 @@ function TogetherView({
           <strong>{dyad.gap} / {model.threshold}</strong>
         </div>
         <div className="metric-grid">
-          <Metric label={`${model.self.name} integral`} value={dyad.self.integral} />
-          <Metric label={`${model.partner.name} integral`} value={dyad.partner.integral} />
-          <Metric label={`${model.self.name} giving`} value={dyad.self.givingIntegral} />
-          <Metric label={`${model.partner.name} giving`} value={dyad.partner.givingIntegral} />
+          <Metric label={`${selfName} integral`} value={dyad.self.integral} />
+          <Metric label={`${partnerName} integral`} value={dyad.partner.integral} />
+          <Metric label={`${selfName} giving`} value={dyad.self.givingIntegral} />
+          <Metric label={`${partnerName} giving`} value={dyad.partner.givingIntegral} />
           <Metric label="Total love integral" value={dyad.totalIntegral} />
           <Metric label="Total giving integral" value={dyad.totalGivingIntegral} />
           <Metric label="Normalized gap" value={`${dyad.normalizedGap}%`} />
@@ -531,7 +542,7 @@ function TogetherView({
         <div className="share-box">
           <button className="icon-button" onClick={onCopy}>
             <Send size={18} />
-            <span>Copy partner link</span>
+            <span>Copy share link</span>
           </button>
           <button className="icon-button ghost" onClick={onExport}>
             <Download size={18} />
@@ -550,6 +561,7 @@ function TogetherView({
 }
 
 function generatePersonInsight(person: PersonModel, result: ReturnType<typeof calculateCurve>): string[] {
+  const personName = displayName(person.name, "This person");
   const topPositive = strongestChannel(person.positives);
   const topAnti = strongestChannel(person.antis);
   const floorShare = Math.round(
@@ -567,7 +579,7 @@ function generatePersonInsight(person: PersonModel, result: ReturnType<typeof ca
         : "Trust is in the middle range, so positive care registers but still has room to translate more efficiently.";
 
   const lines = [
-    `${person.name}'s graph averages ${result.average} received-love units over the horizon, with a lifetime integral of ${result.integral}. ${trustInterpretation}`,
+    `${personName}'s graph averages ${result.average} received-love units over the horizon, with a lifetime integral of ${result.integral}. ${trustInterpretation}`,
   ];
 
   if (topPositive) {
@@ -600,8 +612,10 @@ function generatePersonInsight(person: PersonModel, result: ReturnType<typeof ca
 }
 
 function generateDyadInsight(model: AppModel, dyad: ReturnType<typeof calculateDyad>): string[] {
-  const higherReceiver = dyad.self.integral >= dyad.partner.integral ? model.self.name : model.partner.name;
-  const higherGiver = dyad.self.givingIntegral >= dyad.partner.givingIntegral ? model.self.name : model.partner.name;
+  const selfName = displayName(model.self.name, "Joy");
+  const partnerName = displayName(model.partner.name, "Socratito");
+  const higherReceiver = dyad.self.integral >= dyad.partner.integral ? selfName : partnerName;
+  const higherGiver = dyad.self.givingIntegral >= dyad.partner.givingIntegral ? selfName : partnerName;
   const status = dyad.exceedsThreshold
     ? `The received-love gap is above the threshold by ${Math.round(dyad.gap - model.threshold)} integral units.`
     : `The received-love gap is ${Math.round(model.threshold - dyad.gap)} integral units inside the current threshold.`;
@@ -728,4 +742,8 @@ function Metric({ label, value }: { label: string; value: string | number }) {
       <strong>{value}</strong>
     </div>
   );
+}
+
+function displayName(name: string, fallback: string): string {
+  return name.trim() || fallback;
 }

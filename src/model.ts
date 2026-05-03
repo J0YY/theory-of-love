@@ -113,7 +113,7 @@ export const defaultModel: AppModel = {
   horizon: 30,
   self: {
     id: "self",
-    name: "Me",
+    name: "Joy",
     baseline: 12,
     floor: 28,
     trust: 72,
@@ -133,7 +133,7 @@ export const defaultModel: AppModel = {
   },
   partner: {
     id: "partner",
-    name: "Boyfriend",
+    name: "Socratito",
     baseline: 10,
     floor: 24,
     trust: 66,
