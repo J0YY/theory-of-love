@@ -16,6 +16,15 @@ export type AttachmentStyle = "secure" | "anxious" | "avoidant" | "fearful";
 export type PersonModel = {
   id: string;
   name: string;
+  age: number;
+  relationshipLengthYears: number;
+  honeymoonPeakMonth: number;
+  honeymoonPeakIntensity: number;
+  stableEffort: number;
+  compatibility: number;
+  repairCapacity: number;
+  noveltyCreation: number;
+  reliability: number;
   baseline: number;
   floor: number;
   trust: number;
@@ -44,6 +53,10 @@ export type AppModel = {
 
 export type CurvePoint = {
   t: number;
+  age: number;
+  lifecycle: number;
+  plateau: number;
+  honeymoon: number;
   positive: number;
   anti: number;
   natural: number;
@@ -67,11 +80,16 @@ export type CurveResult = {
   givingIntegral: number;
   averageGiving: number;
   peakGiving: number;
+  predictedPlateau: number;
+  currentLove: number;
+  currentRisk: number;
+  currentAge: number;
 };
 
 export type DyadResult = {
   self: CurveResult;
   partner: CurveResult;
+  horizon: number;
   totalIntegral: number;
   gap: number;
   exceedsThreshold: boolean;
@@ -109,11 +127,20 @@ const antiDefaults: CareChannel[] = [
 
 export const defaultModel: AppModel = {
   version: 1,
-  threshold: 180,
-  horizon: 30,
+  threshold: 8,
+  horizon: 68,
   self: {
     id: "self",
     name: "Joy",
+    age: 24,
+    relationshipLengthYears: 1.2,
+    honeymoonPeakMonth: 3,
+    honeymoonPeakIntensity: 92,
+    stableEffort: 82,
+    compatibility: 86,
+    repairCapacity: 74,
+    noveltyCreation: 78,
+    reliability: 80,
     baseline: 12,
     floor: 28,
     trust: 72,
@@ -134,6 +161,15 @@ export const defaultModel: AppModel = {
   partner: {
     id: "partner",
     name: "Socratito",
+    age: 24,
+    relationshipLengthYears: 1.2,
+    honeymoonPeakMonth: 3,
+    honeymoonPeakIntensity: 90,
+    stableEffort: 80,
+    compatibility: 84,
+    repairCapacity: 76,
+    noveltyCreation: 82,
+    reliability: 78,
     baseline: 10,
     floor: 24,
     trust: 66,
@@ -197,15 +233,29 @@ export function applyAttachmentPreset(person: PersonModel, attachmentStyle: Atta
 export function calculateCurve(person: PersonModel, horizon: number, samples = 121): CurveResult {
   const points: CurvePoint[] = [];
   const dt = horizon / (samples - 1);
+  const predictedPlateau = predictPlateau(person);
+  const peakYear = Math.max(0.08, person.honeymoonPeakMonth / 12);
+  const peakTarget = Math.max(predictedPlateau + 4, person.honeymoonPeakIntensity);
+  const ageAtStart = Math.max(0, person.age - person.relationshipLengthYears);
 
   for (let i = 0; i < samples; i += 1) {
     const t = Number((i * dt).toFixed(2));
     const trustGate = sigmoidGate(person.trust, person.genuineness);
-    const positive = person.positives.reduce((sum, c) => sum + channelSignal(c, t, horizon), 0);
-    const anti = person.antis.reduce((sum, c) => sum + channelSignal(c, t, horizon), 0) * person.lossAversion;
+    const positiveRaw = person.positives.reduce((sum, c) => sum + channelSignal(c, t, horizon), 0);
+    const antiRaw = person.antis.reduce((sum, c) => sum + channelSignal(c, t, horizon), 0);
+    const positive = normalizedChannelScore(person.positives, positiveRaw);
+    const anti = normalizedChannelScore(person.antis, antiRaw) * person.lossAversion;
     const marketDrag = (person.marketAbundance / 100) * (person.marketElasticity / 100) * 18;
-    const reflexiveLift = (person.reflexivity / 100) * Math.min(10, positive / 35);
-    const natural = trustGate * positive + person.baseline + reflexiveLift - marketDrag;
+    const reflexiveLift = (person.reflexivity / 100) * Math.min(9, positive / 11);
+    const lifecycle = lifecycleValue({
+      t,
+      peakYear,
+      peakTarget,
+      plateau: predictedPlateau,
+    });
+    const channelLift = (positive - 50) * 0.22;
+    const trustAdjustment = (trustGate - 0.62) * 22;
+    const natural = lifecycle + person.baseline * 0.34 + channelLift + trustAdjustment + reflexiveLift - marketDrag;
     const penalized = natural - anti;
     const floor = Math.max(0, person.floor - marketDrag * 0.45);
     const love = Math.max(floor, penalized);
@@ -233,6 +283,10 @@ export function calculateCurve(person: PersonModel, horizon: number, samples = 1
 
     points.push({
       t,
+      age: round(ageAtStart + t),
+      lifecycle: round(lifecycle),
+      plateau: round(predictedPlateau),
+      honeymoon: round(Math.max(0, lifecycle - predictedPlateau * (1 - Math.exp(-t / 1.6)))),
       positive: round(positive),
       anti: round(anti),
       natural: round(natural),
@@ -251,6 +305,7 @@ export function calculateCurve(person: PersonModel, horizon: number, samples = 1
   const risks = points.map((p) => p.endRisk);
   const givingValues = points.map((p) => p.giving);
   const givingIntegral = trapezoid(givingValues, dt);
+  const currentPoint = nearestPoint(points, person.relationshipLengthYears);
   return {
     points,
     integral: round(integral),
@@ -262,12 +317,17 @@ export function calculateCurve(person: PersonModel, horizon: number, samples = 1
     givingIntegral: round(givingIntegral),
     averageGiving: round(givingIntegral / horizon),
     peakGiving: round(Math.max(...givingValues)),
+    predictedPlateau: round(predictedPlateau),
+    currentLove: currentPoint.love,
+    currentRisk: currentPoint.endRisk,
+    currentAge: currentPoint.age,
   };
 }
 
 export function calculateDyad(model: AppModel): DyadResult {
-  const self = calculateCurve(model.self, model.horizon);
-  const partner = calculateCurve(model.partner, model.horizon);
+  const horizon = lifetimeHorizon(model);
+  const self = calculateCurve(model.self, horizon);
+  const partner = calculateCurve(model.partner, horizon);
   const totalIntegral = self.integral + partner.integral;
   const totalGivingIntegral = self.givingIntegral + partner.givingIntegral;
   const gap = Math.abs(self.integral - partner.integral);
@@ -275,14 +335,16 @@ export function calculateDyad(model: AppModel): DyadResult {
   const reciprocityMismatch = Math.abs(self.givingIntegral - partner.integral) + Math.abs(partner.givingIntegral - self.integral);
   const deadweightLoss = Math.max(0, self.givingIntegral - partner.integral) + Math.max(0, partner.givingIntegral - self.integral);
   const translationEfficiency = clamp(100 - (deadweightLoss / Math.max(1, totalGivingIntegral)) * 100, 0, 100);
+  const normalizedGap = round((gap / Math.max(1, totalIntegral / 2)) * 100);
   return {
     self,
     partner,
+    horizon,
     totalIntegral: round(totalIntegral),
     gap: round(gap),
-    exceedsThreshold: gap > model.threshold,
-    normalizedGap: round((gap / Math.max(1, totalIntegral)) * 100),
-    averageEndRisk: round(clamp((self.averageRisk + partner.averageRisk) / 2 + Math.max(0, gap - model.threshold) / 45, 0, 100)),
+    exceedsThreshold: normalizedGap > model.threshold,
+    normalizedGap,
+    averageEndRisk: round(clamp((self.averageRisk + partner.averageRisk) / 2 + Math.max(0, normalizedGap - model.threshold) * 1.8, 0, 100)),
     peakEndRisk: round(Math.max(self.peakRisk, partner.peakRisk)),
     totalGivingIntegral: round(totalGivingIntegral),
     givingGap: round(givingGap),
@@ -290,6 +352,50 @@ export function calculateDyad(model: AppModel): DyadResult {
     deadweightLoss: round(deadweightLoss),
     translationEfficiency: round(translationEfficiency),
   };
+}
+
+export function lifetimeHorizon(model: AppModel): number {
+  const selfStartAge = model.self.age - model.self.relationshipLengthYears;
+  const partnerStartAge = model.partner.age - model.partner.relationshipLengthYears;
+  const selfYears = 90 - selfStartAge;
+  const partnerYears = 90 - partnerStartAge;
+  const longestRelationshipSoFar = Math.max(model.self.relationshipLengthYears, model.partner.relationshipLengthYears);
+  return round(clamp(Math.max(model.horizon, selfYears, partnerYears, longestRelationshipSoFar + 5), 5, 80));
+}
+
+function predictPlateau(person: PersonModel): number {
+  const traitScore =
+    person.stableEffort * 0.26 +
+    person.compatibility * 0.24 +
+    person.repairCapacity * 0.18 +
+    person.reliability * 0.18 +
+    person.noveltyCreation * 0.14;
+  const trustBonus = (person.trust - 50) * 0.12;
+  const floorBonus = person.floor * 0.16;
+  const channelFit = normalizedChannelScore(
+    person.positives,
+    person.positives.reduce((sum, channel) => sum + channelSignal(channel, person.relationshipLengthYears, 10), 0),
+  );
+  const channelBonus = (channelFit - 50) * 0.12;
+  const marketDrag = (person.marketAbundance / 100) * (person.marketElasticity / 100) * 12;
+  return clamp(10 + traitScore * 0.62 + trustBonus + floorBonus + channelBonus - marketDrag, 0, 100);
+}
+
+function lifecycleValue({
+  t,
+  peakYear,
+  peakTarget,
+  plateau,
+}: {
+  t: number;
+  peakYear: number;
+  peakTarget: number;
+  plateau: number;
+}): number {
+  const rise = 1 - Math.exp(-t / Math.max(0.05, peakYear * 0.48));
+  const plateauRise = plateau * (1 - Math.exp(-t / 1.6));
+  const honeymoonSurplus = Math.max(0, peakTarget - plateau) * rise * Math.exp(-Math.max(0, t - peakYear) / 1.55);
+  return clamp(plateauRise + honeymoonSurplus, 0, 100);
 }
 
 function calculateGiving({
@@ -355,6 +461,18 @@ function channelSignal(channel: CareChannel, t: number, horizon: number): number
   const saturation = Math.max(8, channel.saturation);
   const saturated = saturation * (1 - Math.exp(-clipped / saturation));
   return saturated * channel.weight;
+}
+
+function normalizedChannelScore(channels: CareChannel[], raw: number): number {
+  const maxSignal = channels.reduce((sum, channel) => {
+    const saturation = Math.max(8, channel.saturation);
+    return sum + saturation * (1 - Math.exp(-100 / saturation)) * channel.weight;
+  }, 0);
+  return clamp((raw / Math.max(1, maxSignal)) * 100, 0, 100);
+}
+
+function nearestPoint(points: CurvePoint[], t: number): CurvePoint {
+  return points.reduce((closest, point) => (Math.abs(point.t - t) < Math.abs(closest.t - t) ? point : closest), points[0]);
 }
 
 function sigmoidGate(trust: number, genuineness: number): number {

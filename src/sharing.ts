@@ -26,9 +26,11 @@ export function createShareUrl(model: AppModel): string {
 
 export function normalizeModel(value: unknown): AppModel {
   const incoming = value as Partial<AppModel>;
+  const threshold = typeof incoming.threshold === "number" && incoming.threshold <= 50 ? incoming.threshold : defaultModel.threshold;
   return {
     ...defaultModel,
     ...incoming,
+    threshold,
     version: 1,
     self: { ...defaultModel.self, ...incoming.self },
     partner: { ...defaultModel.partner, ...incoming.partner },

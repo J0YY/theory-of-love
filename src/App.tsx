@@ -93,8 +93,37 @@ const tips = {
   saturation:
     "Diminishing returns for this channel. Lower saturation means the love language maxes out sooner; higher saturation keeps extra effort valuable longer.",
   threshold:
-    "The maximum tolerable lifetime imbalance between partners' received-love integrals before the dyad is flagged as unstable.",
+    "The maximum tolerable gap between partners' received-love integrals, expressed as a percent of one partner's average lifetime integral. Lower means less imbalance is tolerated.",
   channelName: "Rename the channel to match the actual behavior, like cuddling, sex, long conversations, repairs, or withdrawal.",
+  age: "Current age. The lifetime graph uses this to estimate how many relationship-years remain out to roughly age 90.",
+  relationshipLength:
+    "How long this relationship has already lasted. The vertical 'now' marker is placed here, and the future part of the curve starts after it.",
+  honeymoonPeakMonth:
+    "When the early honeymoon high point happened, measured in months after the relationship started. Earlier peaks make the curve rise faster.",
+  honeymoonPeakIntensity:
+    "How intense the honeymoon peak felt on a 0-100 scale. This controls the early spike before the curve decays toward the long-run plateau.",
+  stableEffort:
+    "Predicted long-run effort trait: consistency, choosing each other, planning, surprises, maintenance, and showing up after novelty fades.",
+  compatibility:
+    "How naturally the two lives, values, rhythms, and emotional needs fit. Higher compatibility raises the predicted plateau and lowers long-run risk.",
+  repairCapacity:
+    "How well rupture becomes repair. Higher repair keeps dips from becoming structural damage.",
+  noveltyCreation:
+    "How much the partner keeps creating aliveness after the information-novelty of the honeymoon fades.",
+  reliability:
+    "How dependable the partner feels over time. Reliability raises the plateau because it makes love easier to trust.",
+};
+
+const metricTips = {
+  integral: "Love-years: the area under the received-love curve across the modeled lifetime horizon.",
+  givingIntegral: "Care-years: the area under the outward giving curve across the modeled lifetime horizon.",
+  totalIntegral: "Both partners' received-love integrals added together.",
+  totalGivingIntegral: "Both partners' giving integrals added together.",
+  normalizedGap: "The received-love integral gap as a percentage of one partner's average lifetime integral.",
+  deadweightLoss: "Care-years that were given but did not translate into the partner's received-love curve.",
+  translationEfficiency: "Percent of giving that successfully turns into received love.",
+  averageRisk: "Average relationship-ending risk pressure across the modeled lifetime.",
+  peakRisk: "Highest relationship-ending risk pressure at any sampled point.",
 };
 
 export default function App() {
@@ -218,13 +247,33 @@ function TheoryView({ model, dyad }: { model: AppModel; dyad: ReturnType<typeof 
   const partnerName = displayName(model.partner.name, "Socratito");
   const combined = dyad.self.points.map((point, index) => ({
     t: point.t,
+    age: point.age,
     self: point.love,
     partner: dyad.partner.points[index]?.love ?? 0,
-    floor: point.floor,
+    selfPlateau: point.plateau,
+    partnerPlateau: dyad.partner.points[index]?.plateau ?? 0,
   }));
 
   return (
     <section className="learn-grid">
+      <div className="chart-panel lifetime-panel">
+        <PanelHeader label="Lifetime love curve" value={`Modeled to ${Math.round(dyad.horizon)} relationship-years`} />
+        <ResponsiveContainer width="100%" height={430}>
+          <LineChart data={combined} margin={{ top: 12, right: 24, left: 0, bottom: 8 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#d9ded6" />
+            <XAxis dataKey="t" tickLine={false} axisLine={false} tickFormatter={formatYears} />
+            <YAxis tickLine={false} axisLine={false} domain={[0, 100]} />
+            <Tooltip labelFormatter={(value) => `relationship year ${value}`} formatter={tooltipValue} />
+            <ReferenceLine x={model.self.relationshipLengthYears} stroke="#1f7a76" strokeDasharray="4 4" />
+            <ReferenceLine x={model.partner.relationshipLengthYears} stroke="#c0506f" strokeDasharray="4 4" />
+            <Line type="monotone" dataKey="self" stroke="#1f7a76" strokeWidth={3} dot={false} name={`${selfName} L_receive`} />
+            <Line type="monotone" dataKey="partner" stroke="#c0506f" strokeWidth={3} dot={false} name={`${partnerName} L_receive`} />
+            <Line type="monotone" dataKey="selfPlateau" stroke="#6b8e5d" strokeWidth={2} dot={false} strokeDasharray="6 4" name={`${selfName} plateau`} />
+            <Line type="monotone" dataKey="partnerPlateau" stroke="#7c6ab1" strokeWidth={2} dot={false} strokeDasharray="6 4" name={`${partnerName} plateau`} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+
       <div className="hero-panel">
         <div className="formula-mark">
           <Heart size={28} />
@@ -238,20 +287,6 @@ function TheoryView({ model, dyad }: { model: AppModel; dyad: ReturnType<typeof 
         <div className="equation">
           L<sub>receive</sub>(t) tracks feeling loved; G<sub>give</sub>(t) tracks care sent outward; risk rises when L(t) &lt; R(t)
         </div>
-      </div>
-
-      <div className="chart-panel">
-        <PanelHeader label="Live dyadic curve" value={`Gap ${dyad.gap}`} />
-        <ResponsiveContainer width="100%" height={320}>
-          <LineChart data={combined} margin={{ top: 10, right: 18, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#d9ded6" />
-            <XAxis dataKey="t" tickLine={false} axisLine={false} />
-            <YAxis tickLine={false} axisLine={false} />
-            <Tooltip />
-            <Line type="monotone" dataKey="self" stroke="#1f7a76" strokeWidth={3} dot={false} name={selfName} />
-            <Line type="monotone" dataKey="partner" stroke="#c0506f" strokeWidth={3} dot={false} name={partnerName} />
-          </LineChart>
-        </ResponsiveContainer>
       </div>
 
       <div className="concept-row">
@@ -284,8 +319,8 @@ function PersonWorkspace({
   return (
     <section className="workspace">
       <div className="chart-panel primary-chart">
-        <PanelHeader label={title} value={`Integral ${result.integral}`} />
-        <SingleCurveChart result={result} />
+        <PanelHeader label={title} value={`${result.integral} love-years`} />
+        <SingleCurveChart result={result} person={person} />
         <InsightBox
           insight={insight}
           onGenerate={() => setInsight(generatePersonInsight(person, result))}
@@ -300,7 +335,7 @@ function PersonWorkspace({
   );
 }
 
-function SingleCurveChart({ result }: { result: ReturnType<typeof calculateCurve> }) {
+function SingleCurveChart({ result, person }: { result: ReturnType<typeof calculateCurve>; person: PersonModel }) {
   return (
     <ResponsiveContainer width="100%" height={390}>
       <AreaChart data={result.points} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
@@ -311,14 +346,16 @@ function SingleCurveChart({ result }: { result: ReturnType<typeof calculateCurve
           </linearGradient>
         </defs>
         <CartesianGrid strokeDasharray="3 3" stroke="#d9ded6" />
-        <XAxis dataKey="t" tickLine={false} axisLine={false} />
-        <YAxis tickLine={false} axisLine={false} />
-        <Tooltip />
+        <XAxis dataKey="t" tickLine={false} axisLine={false} tickFormatter={formatYears} />
+        <YAxis tickLine={false} axisLine={false} domain={[0, 100]} />
+        <Tooltip labelFormatter={(value) => `relationship year ${value}`} formatter={tooltipValue} />
+        <ReferenceLine x={person.relationshipLengthYears} stroke="#1f2528" strokeDasharray="4 4" />
         <ReferenceLine y={result.points[0]?.floor ?? 0} stroke="#9b6a2f" strokeDasharray="5 5" />
         <ReferenceLine y={result.points[0]?.reservation ?? 0} stroke="#7d8191" strokeDasharray="4 4" />
         <Area type="monotone" dataKey="love" stroke="#1f7a76" strokeWidth={3} fill="url(#loveFill)" name="L(t)" />
+        <Line type="monotone" dataKey="plateau" stroke="#6b8e5d" strokeWidth={2} dot={false} strokeDasharray="6 4" name="predicted plateau" />
+        <Line type="monotone" dataKey="lifecycle" stroke="#9b6a2f" strokeWidth={2} dot={false} strokeDasharray="3 5" name="lifecycle before channels" />
         <Line type="monotone" dataKey="giving" stroke="#4967a8" strokeWidth={2} dot={false} name="G(t) giving" />
-        <Line type="monotone" dataKey="natural" stroke="#6b8e5d" strokeWidth={2} dot={false} name="natural" />
         <Line type="monotone" dataKey="penalized" stroke="#c0506f" strokeWidth={2} dot={false} name="after anti-love" />
         <Line type="monotone" dataKey="endRisk" stroke="#d28b21" strokeWidth={2} dot={false} strokeDasharray="6 4" name="ending risk" />
       </AreaChart>
@@ -353,6 +390,48 @@ function PersonControls({ person, onChange }: { person: PersonModel; onChange: (
         <input title={tips.name} value={person.name} onChange={(event) => update("name", event.target.value)} />
       </label>
 
+      <div className="control-group">
+        <div className="section-kicker">Setup</div>
+        <Slider label="Age" description={tips.age} value={person.age} min={16} max={90} formatValue={(value) => `${value}y`} onChange={(value) => update("age", value)} />
+        <Slider
+          label="Relationship length"
+          description={tips.relationshipLength}
+          value={person.relationshipLengthYears}
+          min={0}
+          max={60}
+          step={0.1}
+          formatValue={(value) => `${value.toFixed(1)}y`}
+          onChange={(value) => update("relationshipLengthYears", value)}
+        />
+        <Slider
+          label="Honeymoon peak timing"
+          description={tips.honeymoonPeakMonth}
+          value={person.honeymoonPeakMonth}
+          min={1}
+          max={36}
+          formatValue={(value) => `${value}mo`}
+          onChange={(value) => update("honeymoonPeakMonth", value)}
+        />
+        <Slider
+          label="Honeymoon peak intensity"
+          description={tips.honeymoonPeakIntensity}
+          value={person.honeymoonPeakIntensity}
+          min={0}
+          max={100}
+          formatValue={(value) => `${value}/100`}
+          onChange={(value) => update("honeymoonPeakIntensity", value)}
+        />
+      </div>
+
+      <div className="control-group">
+        <div className="section-kicker">Plateau predictors</div>
+        <Slider label="Stable effort" description={tips.stableEffort} value={person.stableEffort} min={0} max={100} formatValue={(value) => `${value}/100`} onChange={(value) => update("stableEffort", value)} />
+        <Slider label="Compatibility" description={tips.compatibility} value={person.compatibility} min={0} max={100} formatValue={(value) => `${value}/100`} onChange={(value) => update("compatibility", value)} />
+        <Slider label="Repair capacity" description={tips.repairCapacity} value={person.repairCapacity} min={0} max={100} formatValue={(value) => `${value}/100`} onChange={(value) => update("repairCapacity", value)} />
+        <Slider label="Novelty creation" description={tips.noveltyCreation} value={person.noveltyCreation} min={0} max={100} formatValue={(value) => `${value}/100`} onChange={(value) => update("noveltyCreation", value)} />
+        <Slider label="Reliability" description={tips.reliability} value={person.reliability} min={0} max={100} formatValue={(value) => `${value}/100`} onChange={(value) => update("reliability", value)} />
+      </div>
+
       <div className="section-kicker">
         <span className="label-with-help">
           Attachment preset
@@ -372,19 +451,19 @@ function PersonControls({ person, onChange }: { person: PersonModel; onChange: (
         ))}
       </div>
 
-      <Slider label="Baseline" description={tips.baseline} value={person.baseline} min={0} max={40} onChange={(value) => update("baseline", value)} />
-      <Slider label="Floor commitment" description={tips.floor} value={person.floor} min={0} max={80} onChange={(value) => update("floor", value)} />
-      <Slider label="Trust" description={tips.trust} value={person.trust} min={0} max={100} onChange={(value) => update("trust", value)} />
-      <Slider label="Genuineness" description={tips.genuineness} value={person.genuineness} min={0} max={100} onChange={(value) => update("genuineness", value)} />
-      <Slider label="Reflexive update" description={tips.reflexivity} value={person.reflexivity} min={0} max={100} onChange={(value) => update("reflexivity", value)} />
-      <Slider label="Reservation utility" description={tips.reservationUtility} value={person.reservationUtility} min={0} max={90} onChange={(value) => update("reservationUtility", value)} />
-      <Slider label="Market abundance" description={tips.marketAbundance} value={person.marketAbundance} min={0} max={100} onChange={(value) => update("marketAbundance", value)} />
-      <Slider label="Market elasticity" description={tips.marketElasticity} value={person.marketElasticity} min={0} max={100} onChange={(value) => update("marketElasticity", value)} />
-      <Slider label="Loss aversion" description={tips.lossAversion} value={person.lossAversion} min={1} max={3} step={0.1} onChange={(value) => update("lossAversion", value)} />
-      <Slider label="End-risk sensitivity" description={tips.riskSensitivity} value={person.riskSensitivity} min={0} max={100} onChange={(value) => update("riskSensitivity", value)} />
-      <Slider label="Giving baseline" description={tips.givingBaseline} value={person.givingBaseline} min={0} max={50} onChange={(value) => update("givingBaseline", value)} />
-      <Slider label="Giving responsiveness" description={tips.givingResponsiveness} value={person.givingResponsiveness} min={0} max={80} onChange={(value) => update("givingResponsiveness", value)} />
-      <Slider label="Giving capacity" description={tips.givingCapacity} value={person.givingCapacity} min={0} max={100} onChange={(value) => update("givingCapacity", value)} />
+      <Slider label="Baseline" description={tips.baseline} value={person.baseline} min={0} max={40} formatValue={(value) => `${value} pts`} onChange={(value) => update("baseline", value)} />
+      <Slider label="Floor commitment" description={tips.floor} value={person.floor} min={0} max={80} formatValue={(value) => `${value} pts`} onChange={(value) => update("floor", value)} />
+      <Slider label="Trust" description={tips.trust} value={person.trust} min={0} max={100} formatValue={(value) => `${value}/100`} onChange={(value) => update("trust", value)} />
+      <Slider label="Genuineness" description={tips.genuineness} value={person.genuineness} min={0} max={100} formatValue={(value) => `${value}/100`} onChange={(value) => update("genuineness", value)} />
+      <Slider label="Reflexive update" description={tips.reflexivity} value={person.reflexivity} min={0} max={100} formatValue={(value) => `${value}/100`} onChange={(value) => update("reflexivity", value)} />
+      <Slider label="Reservation utility" description={tips.reservationUtility} value={person.reservationUtility} min={0} max={90} formatValue={(value) => `${value} pts`} onChange={(value) => update("reservationUtility", value)} />
+      <Slider label="Market abundance" description={tips.marketAbundance} value={person.marketAbundance} min={0} max={100} formatValue={(value) => `${value}/100`} onChange={(value) => update("marketAbundance", value)} />
+      <Slider label="Market elasticity" description={tips.marketElasticity} value={person.marketElasticity} min={0} max={100} formatValue={(value) => `${value}/100`} onChange={(value) => update("marketElasticity", value)} />
+      <Slider label="Loss aversion" description={tips.lossAversion} value={person.lossAversion} min={1} max={3} step={0.1} formatValue={(value) => `${value.toFixed(1)}x`} onChange={(value) => update("lossAversion", value)} />
+      <Slider label="End-risk sensitivity" description={tips.riskSensitivity} value={person.riskSensitivity} min={0} max={100} formatValue={(value) => `${value}/100`} onChange={(value) => update("riskSensitivity", value)} />
+      <Slider label="Giving baseline" description={tips.givingBaseline} value={person.givingBaseline} min={0} max={50} formatValue={(value) => `${value} pts`} onChange={(value) => update("givingBaseline", value)} />
+      <Slider label="Giving responsiveness" description={tips.givingResponsiveness} value={person.givingResponsiveness} min={0} max={80} formatValue={(value) => `${value}/80`} onChange={(value) => update("givingResponsiveness", value)} />
+      <Slider label="Giving capacity" description={tips.givingCapacity} value={person.givingCapacity} min={0} max={100} formatValue={(value) => `${value}/100`} onChange={(value) => update("givingCapacity", value)} />
 
       <ChannelSection
         title="Love languages"
@@ -441,10 +520,10 @@ function ChannelSection({
               <Trash2 size={16} />
             </button>
           </div>
-          <Slider label="Weight" description={tone === "positive" ? tips.positiveWeight : tips.antiWeight} value={channel.weight} min={0} max={2.5} step={0.05} onChange={(value) => onChange({ ...channel, weight: value })} />
-          <Slider label="Intensity" description={tone === "positive" ? tips.positiveIntensity : tips.antiIntensity} value={channel.intensity} min={0} max={100} onChange={(value) => onChange({ ...channel, intensity: value })} />
-          <Slider label="Variability" description={tips.variability} value={channel.variability} min={0} max={50} onChange={(value) => onChange({ ...channel, variability: value })} />
-          <Slider label="Saturation" description={tips.saturation} value={channel.saturation} min={10} max={100} onChange={(value) => onChange({ ...channel, saturation: value })} />
+          <Slider label="Weight" description={tone === "positive" ? tips.positiveWeight : tips.antiWeight} value={channel.weight} min={0} max={2.5} step={0.05} formatValue={(value) => `${value.toFixed(2)}x`} onChange={(value) => onChange({ ...channel, weight: value })} />
+          <Slider label="Intensity" description={tone === "positive" ? tips.positiveIntensity : tips.antiIntensity} value={channel.intensity} min={0} max={100} formatValue={(value) => `${value}/100`} onChange={(value) => onChange({ ...channel, intensity: value })} />
+          <Slider label="Variability" description={tips.variability} value={channel.variability} min={0} max={50} formatValue={(value) => `${value} pts`} onChange={(value) => onChange({ ...channel, variability: value })} />
+          <Slider label="Saturation" description={tips.saturation} value={channel.saturation} min={10} max={100} formatValue={(value) => `${value}/100`} onChange={(value) => onChange({ ...channel, saturation: value })} />
         </div>
       ))}
     </section>
@@ -494,9 +573,11 @@ function TogetherView({
         <ResponsiveContainer width="100%" height={380}>
           <LineChart data={combined} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#d9ded6" />
-            <XAxis dataKey="t" tickLine={false} axisLine={false} />
-            <YAxis tickLine={false} axisLine={false} />
-            <Tooltip />
+            <XAxis dataKey="t" tickLine={false} axisLine={false} tickFormatter={formatYears} />
+            <YAxis tickLine={false} axisLine={false} domain={[0, 100]} />
+            <Tooltip labelFormatter={(value) => `relationship year ${value}`} formatter={tooltipValue} />
+            <ReferenceLine x={model.self.relationshipLengthYears} stroke="#1f7a76" strokeDasharray="4 4" />
+            <ReferenceLine x={model.partner.relationshipLengthYears} stroke="#c0506f" strokeDasharray="4 4" />
             <Line type="monotone" dataKey={selfName} stroke="#1f7a76" strokeWidth={3} dot={false} />
             <Line type="monotone" dataKey={partnerName} stroke="#c0506f" strokeWidth={3} dot={false} />
             <Line type="monotone" dataKey={`${selfName} giving`} stroke="#4967a8" strokeWidth={2} dot={false} />
@@ -511,27 +592,29 @@ function TogetherView({
       <div className="verdict-panel">
         <div className={dyad.exceedsThreshold ? "verdict danger" : "verdict calm"}>
           <span>Threshold for Maximum Tolerance of Imbalance</span>
-          <strong>{dyad.gap} / {model.threshold}</strong>
+          <strong>{dyad.normalizedGap}% / {model.threshold}%</strong>
         </div>
         <div className="metric-grid">
-          <Metric label={`${selfName} integral`} value={dyad.self.integral} />
-          <Metric label={`${partnerName} integral`} value={dyad.partner.integral} />
-          <Metric label={`${selfName} giving`} value={dyad.self.givingIntegral} />
-          <Metric label={`${partnerName} giving`} value={dyad.partner.givingIntegral} />
-          <Metric label="Total love integral" value={dyad.totalIntegral} />
-          <Metric label="Total giving integral" value={dyad.totalGivingIntegral} />
-          <Metric label="Normalized gap" value={`${dyad.normalizedGap}%`} />
-          <Metric label="Deadweight loss" value={dyad.deadweightLoss} />
-          <Metric label="Translation efficiency" value={`${dyad.translationEfficiency}%`} />
-          <Metric label="Average end risk" value={`${dyad.averageEndRisk}%`} />
-          <Metric label="Peak end risk" value={`${dyad.peakEndRisk}%`} />
+          <Metric label={`${selfName} integral`} value={`${dyad.self.integral} love-years`} description={metricTips.integral} />
+          <Metric label={`${partnerName} integral`} value={`${dyad.partner.integral} love-years`} description={metricTips.integral} />
+          <Metric label={`${selfName} giving`} value={`${dyad.self.givingIntegral} care-years`} description={metricTips.givingIntegral} />
+          <Metric label={`${partnerName} giving`} value={`${dyad.partner.givingIntegral} care-years`} description={metricTips.givingIntegral} />
+          <Metric label="Total love integral" value={`${dyad.totalIntegral} love-years`} description={metricTips.totalIntegral} />
+          <Metric label="Total giving integral" value={`${dyad.totalGivingIntegral} care-years`} description={metricTips.totalGivingIntegral} />
+          <Metric label="Integral gap" value={`${dyad.normalizedGap}%`} description={metricTips.normalizedGap} />
+          <Metric label="Deadweight loss" value={`${dyad.deadweightLoss} care-years`} description={metricTips.deadweightLoss} />
+          <Metric label="Translation efficiency" value={`${dyad.translationEfficiency}%`} description={metricTips.translationEfficiency} />
+          <Metric label="Average end risk" value={`${dyad.averageEndRisk}%`} description={metricTips.averageRisk} />
+          <Metric label="Peak end risk" value={`${dyad.peakEndRisk}%`} description={metricTips.peakRisk} />
         </div>
         <Slider
           label="Imbalance threshold"
           description={tips.threshold}
           value={model.threshold}
-          min={10}
-          max={800}
+          min={1}
+          max={30}
+          step={0.5}
+          formatValue={(value) => `${value}%`}
           onChange={onThresholdChange}
         />
         <InsightBox
@@ -579,7 +662,7 @@ function generatePersonInsight(person: PersonModel, result: ReturnType<typeof ca
         : "Trust is in the middle range, so positive care registers but still has room to translate more efficiently.";
 
   const lines = [
-    `${personName}'s graph averages ${result.average} received-love units over the horizon, with a lifetime integral of ${result.integral}. ${trustInterpretation}`,
+    `${personName}'s graph averages ${result.average} received-love units over the lifetime horizon, with ${result.currentLove} at the current relationship moment and a predicted plateau of ${result.predictedPlateau}. ${trustInterpretation}`,
   ];
 
   if (topPositive) {
@@ -617,8 +700,8 @@ function generateDyadInsight(model: AppModel, dyad: ReturnType<typeof calculateD
   const higherReceiver = dyad.self.integral >= dyad.partner.integral ? selfName : partnerName;
   const higherGiver = dyad.self.givingIntegral >= dyad.partner.givingIntegral ? selfName : partnerName;
   const status = dyad.exceedsThreshold
-    ? `The received-love gap is above the threshold by ${Math.round(dyad.gap - model.threshold)} integral units.`
-    : `The received-love gap is ${Math.round(model.threshold - dyad.gap)} integral units inside the current threshold.`;
+    ? `The received-love gap is above the threshold by ${(dyad.normalizedGap - model.threshold).toFixed(1)} percentage points.`
+    : `The received-love gap is ${(model.threshold - dyad.normalizedGap).toFixed(1)} percentage points inside the current threshold.`;
   const deadweightRead =
     dyad.translationEfficiency >= 85
       ? "Most giving is translating into received love."
@@ -648,6 +731,7 @@ function Slider({
   min,
   max,
   step = 1,
+  formatValue,
   onChange,
 }: {
   label: string;
@@ -656,6 +740,7 @@ function Slider({
   min: number;
   max: number;
   step?: number;
+  formatValue?: (value: number) => string;
   onChange: (value: number) => void;
 }) {
   return (
@@ -665,7 +750,7 @@ function Slider({
           {label}
           {description && <TooltipHelp text={description} />}
         </span>
-        <b>{value}</b>
+        <b>{formatValue ? formatValue(value) : value}</b>
       </span>
       <input
         type="range"
@@ -735,13 +820,27 @@ function ConceptCard({ title, text }: { title: string; text: string }) {
   );
 }
 
-function Metric({ label, value }: { label: string; value: string | number }) {
+function Metric({ label, value, description }: { label: string; value: string | number; description?: string }) {
   return (
     <div className="metric">
-      <span>{label}</span>
+      <span className="label-with-help">
+        {label}
+        {description && <TooltipHelp text={description} />}
+      </span>
       <strong>{value}</strong>
     </div>
   );
+}
+
+function formatYears(value: string | number): string {
+  return `${Number(value).toFixed(Number(value) % 1 === 0 ? 0 : 1)}y`;
+}
+
+function tooltipValue(value: unknown, name: unknown): [string, string] {
+  const numeric = typeof value === "number" ? value : Number(value);
+  const label = typeof name === "string" ? name : String(name);
+  if (Number.isFinite(numeric)) return [numeric.toFixed(1), label];
+  return [String(value), label];
 }
 
 function displayName(name: string, fallback: string): string {

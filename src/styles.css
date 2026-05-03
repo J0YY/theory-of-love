@@ -156,6 +156,10 @@ h3 {
   grid-template-columns: minmax(0, 0.95fr) minmax(420px, 1.05fr);
 }
 
+.lifetime-panel {
+  grid-column: 1 / -1;
+}
+
 .workspace {
   grid-template-columns: minmax(0, 1fr) minmax(360px, 440px);
   align-items: start;
@@ -271,6 +275,15 @@ h3 {
 .controls {
   display: grid;
   gap: 16px;
+}
+
+.control-group {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #d8ddd6;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.58);
 }
 
 .field {
@@ -477,7 +490,9 @@ h3 {
 }
 
 .metric strong {
-  font-size: 1.55rem;
+  font-size: clamp(1.05rem, 1.8vw, 1.35rem);
+  line-height: 1.12;
+  overflow-wrap: anywhere;
 }
 
 .share-box {
